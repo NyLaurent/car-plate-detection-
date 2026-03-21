@@ -1,172 +1,234 @@
-# ANPR - Automatic Number Plate Recognition System
+# Automatic Number Plate Recognition
 
-## Overview
-This project implements a complete Number Plate Recognition pipeline based on the three-step approach:
-1. **Detection** - Locate the license plate in the frame
-2. **Alignment** - Correct perspective distortion
-3. **OCR** - Extract characters using Tesseract
+A real-time ANPR project built with Python, OpenCV, and Tesseract OCR.
 
-## Reference
-Implementation based on:
-**"Car Number Plate Extraction in Three Steps — Detection, Alignment, and OCR"**
-By Gabriel Baziramwabo
+This system captures frames from a webcam, detects plate-shaped regions, corrects perspective, extracts text from the plate, validates the result against known patterns, and saves confirmed detections to disk.
 
-## Features
-- Real-time camera capture (supports external USB cameras)
-- Automatic plate detection using contour analysis
-- Perspective correction and alignment
-- OCR using Tesseract
-- Plate format validation
-- Multi-frame confirmation (reduces false positives)
-- Automatic saving of confirmed plates to CSV
+## Why This Project Stands Out
 
-## System Requirements
-- Python 3.7+
-- External USB camera or webcam
-- Tesseract OCR installed on system
+Instead of stopping at simple OCR on a static image, this project follows a complete computer vision pipeline:
+
+- live camera capture
+- contour-based plate detection
+- perspective alignment
+- OCR preprocessing
+- text extraction with Tesseract
+- format validation
+- temporal confirmation across multiple frames
+- CSV logging plus image capture for confirmed plates
+
+That makes it a practical end-to-end demo rather than just a single-script experiment.
+
+## Demo Pipeline
+
+The recognition flow is:
+
+1. Capture a frame from the webcam.
+2. Detect plate-like rectangular candidates using edges and contours.
+3. Warp the detected plate into a flat aligned image.
+4. Preprocess the aligned crop for OCR.
+5. Read characters using Tesseract.
+6. Validate the extracted text using known plate patterns.
+7. Confirm the plate only after repeated matching across recent frames.
+8. Save the confirmed result to `data/plates.csv` and `data/captures/`.
+
+## Current Tech Stack
+
+- Python
+- OpenCV
+- NumPy
+- pytesseract
+- imutils
+- Pillow
+
+## Project Structure
+
+```text
+plate-recognition/
+|-- README.md
+|-- Quickstart.md
+|-- requirements.txt
+|-- main_verbose.py
+|-- data/
+|   |-- captures/
+|-- screenshots/
+|-- src/
+|   |-- main.py
+|   |-- camera.py
+|   |-- detect.py
+|   |-- align.py
+|   |-- ocr.py
+|   |-- validate.py
+|   |-- temporal.py
+|   |-- storage.py
+|-- venv/
+```
+
+## What Each File Does
+
+- `src/main.py`: runs the main live ANPR pipeline and displays the OpenCV windows
+- `src/camera.py`: opens the webcam and sets capture resolution
+- `src/detect.py`: finds plate-like regions using grayscale conversion, filtering, edges, morphology, and rotated rectangles
+- `src/align.py`: applies a four-point perspective transform and resizes the aligned plate
+- `src/ocr.py`: preprocesses the plate image and reads text using Tesseract
+- `src/validate.py`: validates OCR output against supported plate patterns
+- `src/temporal.py`: reduces false positives by confirming repeated detections across recent frames
+- `src/storage.py`: saves confirmed results to CSV and prevents duplicate saves within a short time window
+- `main_verbose.py`: an older verbose/debug script that is not aligned with the current functional pipeline
+
+## How Detection Works
+
+The plate detector in `src/detect.py` follows a lightweight classical computer vision approach:
+
+- convert frame to grayscale
+- preserve edges with bilateral filtering
+- run Canny edge detection
+- use morphological closing to merge plate characters into a stronger plate-shaped blob
+- inspect the largest contours
+- estimate rotated bounding boxes
+- keep candidates with plate-like aspect ratios and sufficient area
+
+This is a good fit for a school project because it is explainable, easy to debug, and does not require training a model.
+
+## OCR and Validation
+
+After alignment, the plate image is:
+
+- converted to grayscale
+- smoothed with bilateral filtering
+- binarized using Otsu thresholding
+
+Tesseract is then called with a character whitelist of uppercase letters and digits. The extracted result is cleaned and matched against known validation patterns such as:
+
+- `ABC123`
+- `ABC123D`
+- `AB123CD`
+
+## Confirmation Logic
+
+OCR on live video can be noisy. To avoid saving false positives, the system does not save a plate immediately after a single read.
+
+Instead, `TemporalConfirm` stores recent detections and confirms a plate only when it appears repeatedly within the recent history. In the current implementation:
+
+- history size: `10`
+- confirmation threshold: `3`
+
+This makes the output more stable in real-world use.
+
+## Output
+
+When a plate is confirmed, the system saves:
+
+- the plate number
+- the timestamp
+- the image path
+
+to:
+
+```text
+data/plates.csv
+```
+
+It also saves the aligned plate image into:
+
+```text
+data/captures/
+```
+
+Debug screenshots can also be written to:
+
+```text
+screenshots/
+```
 
 ## Installation
 
-### 1. Install Tesseract OCR
+### 1. Create and activate a virtual environment
 
-**Ubuntu/Debian:**
-```bash
-sudo apt-get update
-sudo apt-get install tesseract-ocr
+Windows PowerShell:
+
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
 ```
 
-**macOS:**
-```bash
-brew install tesseract
-```
+### 2. Install Python packages
 
-**Windows:**
-Download installer from: https://github.com/UB-Mannheim/tesseract/wiki
-
-### 2. Install Python Dependencies
-```bash
+```powershell
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-## Usage
+### 3. Install Tesseract OCR
 
-### Basic Usage
-```bash
-python src/main.py
+On Windows, install Tesseract and make sure the executable exists at:
+
+```text
+C:\Program Files\Tesseract-OCR\tesseract.exe
 ```
 
-### With Specific Camera
-```bash
-python src/main.py --camera 1
+The current project is configured to use that path in `src/ocr.py`.
+
+If your Tesseract installation is in a different location, update:
+
+```python
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 ```
 
-### Controls
-- **Press 'q'** - Quit the application
-- **Press 's'** - Save current frame
-- **Press 'r'** - Reset confirmation counter
+## How To Run
 
-## Project Structure
-```
-anpr-project/
-│
-├── README.md              # This file
-├── requirements.txt       # Python dependencies
-│
-├── src/
-│   ├── detect.py         # Plate detection logic
-│   ├── align.py          # Perspective correction
-│   ├── ocr.py            # Character extraction
-│   ├── validate.py       # Plate format validation
-│   └── main.py           # Main pipeline
-│
-├── data/
-│   └── plates.csv        # Saved confirmed plates
-│
-└── screenshots/          # Example results
-    ├── detection.png
-    ├── alignment.png
-    └── ocr.png
+From the project root:
+
+```powershell
+python .\src\main.py
 ```
 
-## Pipeline Explanation
+## Controls
 
-### Step 1: Detection
-- Convert frame to grayscale
-- Apply bilateral filter to reduce noise while preserving edges
-- Use Canny edge detection
-- Find contours and filter by area and aspect ratio
-- Select candidates with rectangular shape (4 corners)
+- `q`: quit the application
+- `s`: save the current debug screenshots
 
-### Step 2: Alignment
-- Extract the four corner points of the detected plate
-- Order points (top-left, top-right, bottom-right, bottom-left)
-- Calculate destination dimensions
-- Apply perspective transformation using cv2.getPerspectiveTransform()
-- Warp image to obtain aligned, rectangular plate
+## Screens You Will See
 
-### Step 3: OCR
-- Preprocess aligned plate (grayscale, threshold, denoise)
-- Apply Tesseract OCR with configuration optimized for license plates
-- Parse and clean the extracted text
-- Validate format against expected patterns
+The app can display:
 
-### Validation & Confirmation
-- Check plate format (letters, numbers, length)
-- Require multiple consecutive detections (default: 5 frames)
-- Save only confirmed plates to avoid false positives
+- `Detection`: live frame with detected candidate outlines and OCR status
+- `Aligned Plate`: perspective-corrected plate crop
+- `OCR Input`: the thresholded image passed to Tesseract
 
-## Testing Results
+## Example Use Case
 
-### Test Vehicle 1
-- **Detection**: ✓ Success
-- **Alignment**: ✓ Success  
-- **OCR Result**: RAD123B
-- **Validation**: ✓ Passed
-- **Frames to Confirm**: 5/5
+This project can be used as:
 
-### Test Vehicle 2
-- **Detection**: ✓ Success
-- **Alignment**: ✓ Success
-- **OCR Result**: RBA456C
-- **Validation**: ✓ Passed
-- **Frames to Confirm**: 5/5
+- a computer vision course project
+- a final-year demonstration project
+- a base for parking gate automation experiments
+- a starting point for building a smarter ANPR system with deep learning later
 
-## Troubleshooting
+## Known Limitations
 
-### Camera not detected
-- Check camera index (try 0, 1, 2)
-- Ensure camera is properly connected
-- Check camera permissions
+This implementation is strong as a classical CV prototype, but it still has some practical limitations:
 
-### Poor OCR results
-- Ensure good lighting conditions
-- Adjust camera distance (30cm - 2m optimal)
-- Clean the license plate if dirty
-- Check Tesseract installation
+- it depends heavily on lighting and camera angle
+- it uses contour heuristics rather than a trained detector
+- OCR quality drops when the plate is blurry, dirty, tilted, or far away
+- the current OCR path is configured specifically for Windows
+- `main_verbose.py` appears to reference class-based components that are not present in the current `src/` code
 
-### No plates detected
-- Adjust detection thresholds in detect.py
-- Ensure plate is clearly visible
-- Check minimum area settings
+## Ideas For Future Improvement
 
-## Configuration
+- add automatic OS-specific Tesseract path detection
+- support multiple plate formats and regions
+- add OCR confidence scoring to saved output
+- export bounding boxes and recognition metadata
+- replace heuristic detection with a trained detector such as YOLO
+- add a test script for static sample images
+- build a small dashboard for browsing saved detections
 
-Edit `src/detect.py` to adjust detection parameters:
-- `MIN_AREA`: Minimum contour area (default: 500)
-- `MAX_AREA`: Maximum contour area (default: 50000)
-- `MIN_ASPECT_RATIO`: Minimum width/height ratio (default: 2.0)
-- `MAX_ASPECT_RATIO`: Maximum width/height ratio (default: 6.0)
+## Notes
 
-Edit `src/validate.py` to adjust validation patterns:
-- Modify `PLATE_PATTERNS` for different country formats
+This repository looks like it started from a cloned template, but the current codebase already has a real working pipeline and sample outputs. The README now reflects the code that actually exists in this project today.
 
 ## License
-MIT License - Educational Project
 
-## Author
-Year 3 Computer Science Student
-
-## Acknowledgments
-- Reference book by Gabriel Baziramwabo
-- OpenCV community
-- Tesseract OCR project# car-plate-detection-
+This project is intended for educational and learning purposes.
